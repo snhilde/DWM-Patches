@@ -1,0 +1,106 @@
+From e90cf02b3ce39dc10fa2f99528040ea53a227082 Mon Sep 17 00:00:00 2001
+From: Hilde N <snhilde@protonmail.com>
+Date: Sat, 23 May 2020 17:58:08 -0400
+Subject: [PATCH] spawn new windows with the same working directory of the
+ current window
+
+---
+ dwm.c | 56 +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 55 insertions(+), 1 deletion(-)
+
+diff --git a/dwm.c b/dwm.c
+index 9fd0286..fd71be1 100644
+--- a/dwm.c
++++ b/dwm.c
+@@ -20,6 +20,8 @@
+  *
+  * To understand everything else, start reading main().
+  */
++#include <ctype.h>
++#include <dirent.h>
+ #include <errno.h>
+ #include <locale.h>
+ #include <signal.h>
+@@ -62,7 +64,7 @@ enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
+ enum { SchemeNorm, SchemeSel }; /* color schemes */
+ enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
+        NetWMFullscreen, NetActiveWindow, NetWMWindowType,
+-       NetWMWindowTypeDialog, NetClientList, NetLast }; /* EWMH atoms */
++       NetWMWindowTypeDialog, NetClientList, NetWMPID, NetLast }; /* EWMH atoms */
+ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms */
+ enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
+        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
+@@ -1563,6 +1565,7 @@ setup(void)
+ 	netatom[NetWMWindowType] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+ 	netatom[NetWMWindowTypeDialog] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+ 	netatom[NetClientList] = XInternAtom(dpy, "_NET_CLIENT_LIST", False);
++	netatom[NetWMPID] = XInternAtom(dpy, "_NET_WM_PID", False);
+ 	/* init cursors */
+ 	cursor[CurNormal] = drw_cur_create(drw, XC_left_ptr);
+ 	cursor[CurResize] = drw_cur_create(drw, XC_sizing);
+@@ -1640,11 +1643,62 @@ sigchld(int unused)
+ void
+ spawn(const Arg *arg)
+ {
++	Atom da;
++	int di;
++	unsigned long dl;
++	unsigned char *p = NULL;
++	unsigned int term_pid = 0;
++	DIR *procs = NULL;
++	struct dirent *proc = NULL;
++	const char *name;
++	size_t len;
++	unsigned int i;
++	char buffer[512];
++	FILE *fp = NULL;
++	int ppid;
++	char path[256];
++	const char *cwd = NULL;
++
+ 	if (arg->v == dmenucmd)
+ 		dmenumon[0] = '0' + selmon->num;
++
++	if(selmon->sel) {
++		/* Get this window's process. */
++		if (XGetWindowProperty(dpy, selmon->sel->win, netatom[NetWMPID], 0L, 1024L, False,
++		    XA_CARDINAL, &da, &di, &dl, &dl, &p) == Success && p) {
++			term_pid = p[0] + (p[1]<<8) + (p[2]<<16) + (p[3]<<24);
++			XFree(p);
++
++			/* Get the child process running under it. */
++			if (term_pid && (procs = opendir("/proc"))) {
++				while ((proc = readdir(procs))) {
++					name = proc->d_name;
++					len = strlen(name);
++					for (i = 0; i < len && isdigit(name[i]); i++);
++					if (i == len) {
++						snprintf(buffer, sizeof(buffer), "/proc/%s/stat", name);
++						if ((fp = fopen(buffer, "r"))) {
++							fscanf(fp, "%*d %*s %*c %d", &ppid);
++							fclose(fp);
++							if (term_pid == ppid) {
++								snprintf(buffer, LENGTH(buffer), "/proc/%s/cwd", name);
++								realpath(buffer, path);
++								cwd = path;
++								break;
++							}
++						}
++					}
++				}
++				closedir(procs);
++			}
++		}
++	}
++
+ 	if (fork() == 0) {
+ 		if (dpy)
+ 			close(ConnectionNumber(dpy));
++		if (cwd)
++			chdir(cwd);
+ 		setsid();
+ 		execvp(((char **)arg->v)[0], (char **)arg->v);
+ 		fprintf(stderr, "dwm: execvp %s", ((char **)arg->v)[0]);
+-- 
+2.26.2
+
