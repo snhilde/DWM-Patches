@@ -5,6 +5,7 @@
 Patches to extend dwm's functionality
 
 * [Attach Next](dwm-attachnext-6.2.diff): Attach new windows immediately after the window currently focused
+* [Dual Status](dwm-dualstatus-6.2.diff): Add a second statusbar
 * [Lock Layout](dwm-locklayout-6.2.diff): Enforce layouts on tags
 * [Macbook Keys](dwm-macbookkeys-6.2.diff): Use common names for Macbook function keys
 * [Monocole Count](dwm-monoclecount-6.2.diff): Display current index in cycle and total number of windows when using Monocle layout
